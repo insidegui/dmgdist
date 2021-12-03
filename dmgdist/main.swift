@@ -8,14 +8,21 @@
 import Cocoa
 import ArgumentParser
 import ShellOut
+import Darwin
 
 private var statusCheckTimer: Timer?
 var bundleId: String!
 
 struct DMGDist: ParsableCommand {
+    
+    static let maxOutputDMGFilenameLength = 27
 
     struct Failure: LocalizedError {
-        var localizedDescription: String
+        var errorDescription: String?
+        
+        init(_ description: String) {
+            self.errorDescription = description
+        }
     }
 
     @Flag(help: "Verbose output")
@@ -38,43 +45,55 @@ struct DMGDist: ParsableCommand {
 
     @Argument(help: "Your App Store Connect app-specific password, or the identifier for a keychain item in the format @keychain:ITEMNAME")
     var ascPassword: String
+    
+    @Option(name: .long, help: "Custom name for the output DMG file (max \(Self.maxOutputDMGFilenameLength) characters)")
+    var dmgName: String?
 
     /// Uses `create-dmg` to prepare a temporary DMG with the app, returns the URL of the DMG.
     func prepareDMG() throws -> URL {
         let appFileURL = URL(fileURLWithPath: appFilePath)
+        
+        let appName = appFileURL.deletingPathExtension().lastPathComponent
+        let sanitizedAppName = appName.replacingOccurrences(of: " ", with: "")
+        
+        if appName.contains(" ") {
+            fputs("WARNING: The app file name contains spaces, they will be removed in the output file.\n", stderr)
+        }
 
         guard FileManager.default.fileExists(atPath: appFileURL.path) else {
-            throw Failure(localizedDescription: "The input app doesn't exist at \(appFileURL.path)")
+            throw Failure("The input app doesn't exist at \(appFileURL.path)")
         }
 
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("DMGDist-" + appFileURL.deletingPathExtension().lastPathComponent + "-\(Date().timeIntervalSince1970)")
+            .appendingPathComponent("DMGDist-" + sanitizedAppName + "-\(Date().timeIntervalSince1970)")
 
         if !FileManager.default.fileExists(atPath: tempDir.path) {
             try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
         }
 
-        let appName = appFileURL.deletingPathExtension().lastPathComponent
-
         guard let appBundle = Bundle(url: appFileURL) else {
-            throw Failure(localizedDescription: "Failed to construct app bundle")
+            throw Failure("Failed to construct app bundle")
         }
 
         guard let shortVersionString = appBundle.infoDictionary?["CFBundleShortVersionString"] as? String else {
-            throw Failure(localizedDescription: "Failed to read CFBundleShortVersionString from app's Info.plist")
+            throw Failure("Failed to read CFBundleShortVersionString from app's Info.plist")
         }
 
         guard let bundleVersion = appBundle.infoDictionary?["CFBundleVersion"] as? String else {
-            throw Failure(localizedDescription: "Failed to read CFBundleVersion from app's Info.plist")
+            throw Failure("Failed to read CFBundleVersion from app's Info.plist")
         }
 
         guard let identifier = appBundle.bundleIdentifier else {
-            throw Failure(localizedDescription: "Couldn't get app bundle identifier")
+            throw Failure("Couldn't get app bundle identifier")
         }
 
         bundleId = identifier
 
-        let outputDMGName = "\(appName)_v\(shortVersionString)-\(bundleVersion)"
+        let outputDMGName = dmgName ?? "\(sanitizedAppName)_v\(shortVersionString)-\(bundleVersion)"
+        
+        guard outputDMGName.count < Self.maxOutputDMGFilenameLength else {
+            throw Failure("The output DMG file name \"\(outputDMGName)\" exceeds the maximum character limit of \(Self.maxOutputDMGFilenameLength).\nPlease specify a shorter custom name with the --dmg-name option.")
+        }
 
         if verbose {
             print("Primary bundle ID is \(identifier)")
@@ -82,18 +101,18 @@ struct DMGDist: ParsableCommand {
             print("Using temporary directory \(tempDir.path)")
         }
 
-        try shellOut(to: "create-dmg", arguments: ["--identity=\"\(identity)\"", "--overwrite", "--dmg-title=\"\(outputDMGName)\"", appFilePath, tempDir.path])
+        try shellOut(to: "create-dmg", arguments: ["--identity=\"\(identity)\"", "--overwrite", "--dmg-title=\"\(outputDMGName)\"", "\"\(appFilePath)\"", tempDir.path])
 
         if verbose {
             print("Renaming output DMG")
         }
 
         guard let enumerator = FileManager.default.enumerator(at: tempDir, includingPropertiesForKeys: nil) else {
-            throw Failure(localizedDescription: "Failed to read output directory")
+            throw Failure("Failed to read output directory")
         }
 
         guard let originalDMGURL = enumerator.allObjects.compactMap({ $0 as? URL }).first(where: { $0.pathExtension.lowercased() == "dmg" }) else {
-            throw Failure(localizedDescription: "Couldn't find output DMG in temporary directory")
+            throw Failure("Couldn't find output DMG in temporary directory")
         }
 
         let outputDMGURL = tempDir
@@ -217,7 +236,7 @@ struct DMGDist: ParsableCommand {
 
         waitForRequestToBeFulfilled(requestId) { success in
             guard success else {
-                Self.exit(withError: Failure(localizedDescription: "Notarization failed"))
+                Self.exit(withError: Failure("Notarization failed"))
             }
 
             try! stapleDMG(at: dmgURL)
