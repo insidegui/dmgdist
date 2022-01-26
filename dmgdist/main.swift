@@ -209,7 +209,20 @@ struct DMGDist: ParsableCommand {
     }
 
     private func stapleDMG(at dmgURL: URL) throws {
-        try shellOut(to: "xcrun", arguments: ["stapler", "staple", dmgURL.path])
+        if verbose { print("📝 Stapling…") }
+        
+        var args = ["stapler", "staple"]
+        
+        if verbose { args.append("-v") }
+        
+        args.append(dmgURL.path)
+        
+        let output = try shellOut(to: "xcrun", arguments: args)
+        
+        if verbose {
+            print("stapler output:")
+            print(output)
+        }
 
         print("Ready for distribution 🎉")
 
