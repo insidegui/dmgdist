@@ -52,24 +52,24 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "&quot;/Users/inside/Desktop/AirBuddy-Beta 2020-10-08 17-56-18/AirBuddy.app&quot;"
-            isEnabled = "NO">
+            argument = "&quot;/Users/insidegui/Desktop/AirBuddy-Beta 2022-01-29 18-20-23/AirBuddy.app&quot;"
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "&quot;Developer ID Application: GUILHERME RAMBO (8C7439RJLG)&quot;"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "8C7439RJLG"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "&quot;eu@guilhermerambo.me&quot;"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "&quot;@keychain:ALTOOLRAMBO&quot;"
-            isEnabled = "NO">
+            argument = "&quot;NOTARYTOOLRAMBO&quot;"
+            isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>

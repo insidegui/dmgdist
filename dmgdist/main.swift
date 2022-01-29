@@ -27,6 +27,9 @@ struct DMGDist: ParsableCommand {
 
     @Flag(help: "Verbose output")
     var verbose = false
+    
+    @Flag(inversion: .prefixedNo, help: "Enable/disable using the modern notarytool for submission instead of the legacy altool")
+    var useNotaryTool = true
 
     @Option(help: "A notarization request id. If provided, the script will skip creating the DMG and uploading it for notarization and just keep checking for the notarization status.")
     var checkRequestId: String?
@@ -125,7 +128,7 @@ struct DMGDist: ParsableCommand {
     }
 
     /// Calls `altool` to notarize the DMG and returns the request ID.
-    private func requestNotarization(for dmgURL: URL) throws -> String {
+    private func requestNotarizationWithLegacyTool(for dmgURL: URL) throws -> String {
         if verbose {
             print("Uploading for notarization")
         }
@@ -154,7 +157,7 @@ struct DMGDist: ParsableCommand {
 
         return response.upload.requestUUID
     }
-
+ 
     private func fetchNotarizationStatus(for id: String) throws -> NotarizationStatusResponse {
         let output = try shellOut(
             to: "xcrun",
@@ -241,18 +244,38 @@ struct DMGDist: ParsableCommand {
         }
 
         let dmgURL = try prepareDMG()
-        let requestId = try requestNotarization(for: dmgURL)
-
-        if verbose {
-            print("Notarization request ID: \(requestId)")
-        }
-
-        waitForRequestToBeFulfilled(requestId) { success in
-            guard success else {
-                Self.exit(withError: Failure("Notarization failed"))
+        
+        if useNotaryTool {
+            if verbose {
+                print("Running notarytool")
             }
-
-            try! stapleDMG(at: dmgURL)
+            
+            // xcrun notarytool submit Package.dmg --keychain-profile "NOTARYTOOLRAMBO" --wait
+            try shellOut(
+                to: "xcrun",
+                arguments: [
+                    "notarytool",
+                    "submit", "\"\(dmgURL.path)\"",
+                    "--keychain-profile", "\"\(ascPassword)\"",
+                    "--wait"
+                ]
+            )
+            
+            try stapleDMG(at: dmgURL)
+        } else {
+            let requestId = try requestNotarizationWithLegacyTool(for: dmgURL)
+            
+            if verbose {
+                print("Notarization request ID: \(requestId)")
+            }
+            
+            waitForRequestToBeFulfilled(requestId) { success in
+                guard success else {
+                    Self.exit(withError: Failure("Notarization failed"))
+                }
+                
+                try! stapleDMG(at: dmgURL)
+            }
         }
     }
 
